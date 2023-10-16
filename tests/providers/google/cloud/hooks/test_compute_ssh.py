@@ -158,7 +158,7 @@ class TestComputeEngineHookWithPassedProjectId:
         mock_compute_hook.return_value.project_id = TEST_PROJECT_ID
         mock_compute_hook.return_value.get_instance_address.return_value = EXTERNAL_IP
 
-        mock_compute_hook.return_value.get_instance_info.return_value = {"metadata": {}}
+        mock_compute_hook.return_value.get_instance_info.return_value = {"metadata": {"key": "non-ssh-keys-metadata", "value": "var"}}
 
         hook = ComputeEngineSSHHook(instance_name=TEST_INSTANCE_NAME, zone=TEST_ZONE, use_oslogin=False)
         result = hook.get_conn()
@@ -178,7 +178,7 @@ class TestComputeEngineHookWithPassedProjectId:
                     project_id=TEST_PROJECT_ID, resource_id=TEST_INSTANCE_NAME, zone=TEST_ZONE
                 ),
                 mock.call().set_instance_metadata(
-                    metadata={"items": [{"key": "ssh-keys", "value": f"{TEST_PUB_KEY}\n"}]},
+                    metadata={"items": [{"key": "non-ssh-keys-metadata", "value": "var"}, {"key": "ssh-keys", "value": f"{TEST_PUB_KEY}\n"}]},
                     project_id=TEST_PROJECT_ID,
                     resource_id=TEST_INSTANCE_NAME,
                     zone=TEST_ZONE,
@@ -261,7 +261,7 @@ class TestComputeEngineHookWithPassedProjectId:
         mock_compute_hook.return_value.get_instance_address.return_value = EXTERNAL_IP
 
         mock_compute_hook.return_value.get_instance_info.return_value = {
-            "metadata": {"items": [{"key": "ssh-keys", "value": f"{TEST_PUB_KEY2}\n"}]}
+            "metadata": {"items": [{"key": "non-ssh-keys-metadata", "value": "var"}, {"key": "ssh-keys", "value": f"{TEST_PUB_KEY2}\n"}]}
         }
 
         hook = ComputeEngineSSHHook(instance_name=TEST_INSTANCE_NAME, zone=TEST_ZONE, use_oslogin=False)
@@ -269,7 +269,7 @@ class TestComputeEngineHookWithPassedProjectId:
         assert mock_ssh_client.return_value == result
 
         mock_compute_hook.return_value.set_instance_metadata.assert_called_once_with(
-            metadata={"items": [{"key": "ssh-keys", "value": f"{TEST_PUB_KEY}\n{TEST_PUB_KEY2}\n"}]},
+            metadata={"items": [{"key": "non-ssh-keys-metadata", "value": "var"}, {"key": "ssh-keys", "value": f"{TEST_PUB_KEY}\n{TEST_PUB_KEY2}\n"}]},
             project_id=TEST_PROJECT_ID,
             resource_id=TEST_INSTANCE_NAME,
             zone=TEST_ZONE,
