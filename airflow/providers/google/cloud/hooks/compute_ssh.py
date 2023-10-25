@@ -293,6 +293,7 @@ class ComputeEngineSSHHook(SSHHook):
                 )
                 return client
             except paramiko.SSHException:
+                client.close()
                 if time_to_wait == max_time_to_wait:
                     raise
             self.log.info("Failed to connect. Waiting %ds to retry", time_to_wait)
