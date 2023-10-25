@@ -49,9 +49,10 @@ class _GCloudAuthorizedSSHClient(paramiko.SSHClient):
         self.google_hook = google_hook
         self.decorator = None
 
-    def connect(self, *args, **kwargs):
+    def connect(self, proxy_command, *args, **kwargs):
         self.decorator = self.google_hook.provide_authorized_gcloud()
         self.decorator.__enter__()
+        kwargs["sock"] = paramiko.ProxyCommand(proxy_command) if proxy_command else None
         return super().connect(*args, **kwargs)
 
     def close(self):
@@ -288,7 +289,7 @@ class ComputeEngineSSHHook(SSHHook):
                     hostname=hostname,
                     username=user,
                     pkey=pkey,
-                    sock=paramiko.ProxyCommand(proxy_command) if proxy_command else None,
+                    proxy_command=proxy_command,
                     look_for_keys=False,
                 )
                 return client
