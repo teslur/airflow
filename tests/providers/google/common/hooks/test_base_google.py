@@ -151,11 +151,12 @@ class TestProvideGcpCredentialFile:
         ):
             self.instance = hook.GoogleBaseHook(gcp_conn_id="google-cloud-default")
 
-    def test_provide_gcp_credential_file_decorator_key_path_and_keyfile_dict(self):
+    def test_provide_gcp_credential_file_decorator_key_path_and_keyfile_dict_and_key_secret_name(self):
         key_path = "/test/key-path"
         self.instance.extras = {
             "key_path": key_path,
             "keyfile_dict": '{"foo": "bar"}',
+            "key_secret_name": "key_secret_name",
         }
 
         @hook.GoogleBaseHook.provide_gcp_credential_file
@@ -164,7 +165,7 @@ class TestProvideGcpCredentialFile:
 
         with pytest.raises(
             AirflowException,
-            match="The `keyfile_dict` and `key_path` fields are mutually exclusive. "
+            match="The `keyfile_dict`, `key_path` and `key_secret_name` fields are mutually exclusive. "
             "Please provide only one value.",
         ):
             assert_gcp_credential_file_in_env(self.instance)
@@ -308,6 +309,25 @@ class TestProvideGcpCredentialFileAsContext:
         with self.instance.provide_gcp_credential_file_as_context():
             assert os.environ[CREDENTIALS] == file_name
             assert file_content == string_file.getvalue()
+
+    @mock.patch("tempfile.NamedTemporaryFile")
+    @mock.patch("airflow.providers.google.common.hooks.base_google._SecretManagerClient")
+    def test_provide_gcp_credential_file_decorator_key_secret_name(
+        self, mock_secret_manager_client, mock_file
+    ):
+        string_file = StringIO()
+        secret_content = '{"foo": "bar"}'
+        file_name = "/test/mock-file"
+        mock_secret_manager_client.return_value.is_valid_secret_name.return_value = True
+        mock_secret_manager_client.return_value.get_secret.return_value = secret_content
+        self.instance.extras = {"key_secret_name": "key_secret_name", "key_secret_project_id": PROJECT_ID}
+        mock_file_handler = mock_file.return_value.__enter__.return_value
+        mock_file_handler.name = file_name
+        mock_file_handler.write = string_file.write
+
+        with self.instance.provide_gcp_credential_file_as_context():
+            assert os.environ[CREDENTIALS] == file_name
+            assert secret_content == string_file.getvalue()
 
     @mock.patch.dict(os.environ, {CREDENTIALS: ENV_VALUE})
     def test_provide_gcp_credential_keep_environment(self):
@@ -726,16 +746,19 @@ class TestProvideAuthorizedGcloud:
         return_value="PROJECT_ID",
     )
     @mock.patch(MODULE_NAME + ".check_output")
-    def test_provide_authorized_gcloud_key_path_and_keyfile_dict(self, mock_check_output, mock_default):
+    def test_provide_authorized_gcloud_key_path_and_keyfile_dict_and_key_secret_name(
+        self, mock_check_output, mock_default
+    ):
         key_path = "/test/key-path"
         self.instance.extras = {
             "key_path": key_path,
             "keyfile_dict": '{"foo": "bar"}',
+            "key_secret_name": "key_secret_name",
         }
 
         with pytest.raises(
             AirflowException,
-            match="The `keyfile_dict` and `key_path` fields are mutually exclusive. "
+            match="The `keyfile_dict`, `key_path` and `key_secret_name` fields are mutually exclusive. "
             "Please provide only one value.",
         ):
             with self.instance.provide_authorized_gcloud():

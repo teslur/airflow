@@ -47,6 +47,9 @@ from googleapiclient.http import MediaIoBaseDownload, build_http, set_user_agent
 from airflow import version
 from airflow.exceptions import AirflowException, AirflowProviderDeprecationWarning
 from airflow.hooks.base import BaseHook
+from airflow.providers.google.cloud._internal_client.secret_manager_client import (
+    _SecretManagerClient,
+)
 from airflow.providers.google.cloud.utils.credentials_provider import (
     _get_scopes,
     _get_target_principal_and_delegates,
@@ -507,9 +510,12 @@ class GoogleBaseHook(BaseHook):
         """
         key_path: str | None = self._get_field("key_path", None)
         keyfile_dict: str | dict[str, str] | None = self._get_field("keyfile_dict", None)
-        if key_path and keyfile_dict:
+        key_secret_name: str | None = self._get_field("key_secret_name", None)
+
+        key_options = [key_path, key_secret_name, keyfile_dict]
+        if len([x for x in key_options if x]) > 1:
             raise AirflowException(
-                "The `keyfile_dict` and `key_path` fields are mutually exclusive. "
+                "The `keyfile_dict`, `key_path` and `key_secret_name` fields are mutually exclusive. "
                 "Please provide only one value."
             )
         elif key_path:
@@ -522,6 +528,29 @@ class GoogleBaseHook(BaseHook):
                 if isinstance(keyfile_dict, dict):
                     keyfile_dict = json.dumps(keyfile_dict)
                 conf_file.write(keyfile_dict)
+                conf_file.flush()
+                with patch_environ({CREDENTIALS: conf_file.name}):
+                    yield conf_file.name
+        elif key_secret_name:
+            key_secret_project_id = self._get_field("key_secret_project_id", None)
+
+            adc_credentials, adc_project_id = google.auth.default(scopes=self.scopes)
+            secret_manager_client = _SecretManagerClient(credentials=adc_credentials)
+
+            if not secret_manager_client.is_valid_secret_name(key_secret_name):
+                raise AirflowException("Invalid secret name specified for fetching JSON key data.")
+
+            secret_value = secret_manager_client.get_secret(
+                secret_id=key_secret_name,
+                project_id=key_secret_project_id if key_secret_project_id else adc_project_id,
+            )
+            if secret_value is None:
+                raise AirflowException(f"Failed getting value of secret {key_secret_name}.")
+
+            with tempfile.NamedTemporaryFile(mode="w+t") as conf_file:
+                if isinstance(secret_value, dict):
+                    secret_value = json.dumps(secret_value)
+                conf_file.write(secret_value)
                 conf_file.flush()
                 with patch_environ({CREDENTIALS: conf_file.name}):
                     yield conf_file.name
